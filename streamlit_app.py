@@ -15,8 +15,32 @@ st.markdown("Herramientas para cálculos FCC, Delta-H y coberturas con radiales.
 
 FCC_BASE = "https://geo.fcc.gov/api/contours/distance.json"
 
+
 # ==========================================================
-# FUNCIÓN: ELEVACIONES (NASADEM)
+# FUNCIÓN: PERFIL NASADEM (81 puntos, 10–50 km)
+# ==========================================================
+def obtener_perfil_nasadem(lat0, lon0, ang):
+    distancias = np.arange(10, 50.1, 0.5)
+
+    puntos = []
+    for d in distancias:
+        lat, lon = geographic_offset(lat0, lon0, d, ang)
+        puntos.append(f"{lat},{lon}")
+
+    locations = "|".join(puntos)
+    url = f"https://api.opentopodata.org/v1/nasadem?locations={locations}"
+
+    try:
+        r = requests.get(url, timeout=6)
+        data = r.json()
+        elev = [p["elevation"] for p in data["results"]]
+        return elev
+    except:
+        return None
+
+
+# ==========================================================
+# FUNCIÓN: DELTA-H NASADEM
 # ==========================================================
 def calcular_delta_h_nasadem(lat0, lon0, ang):
     perfil = obtener_perfil_nasadem(lat0, lon0, ang)
@@ -26,16 +50,11 @@ def calcular_delta_h_nasadem(lat0, lon0, ang):
 
     elev = np.array([0 if v is None else v for v in perfil])
 
-    # suavizado opcional
-    # from scipy.ndimage import median_filter
-    # elev = median_filter(elev, size=5)
-
     h10 = np.percentile(elev, 10)
     h90 = np.percentile(elev, 90)
     delta_h = h90 - h10
 
     return h10, h90, delta_h, elev
-
 
 
 # ==========================================================
@@ -46,25 +65,19 @@ def geographic_offset(lat0, lon0, dist_km, ang_deg):
     lon = lon0 + (dist_km / (111 * math.cos(math.radians(lat0)))) * math.sin(math.radians(ang_deg))
     return lat, lon
 
+
 # ==========================================================
-# CALCULAR DELTA-H (METODOLOGÍA FCC)
-# Puntos entre 10 km – 50 km → percentil 10% y 90%
+# CALCULAR DELTA-H SRTM (Sigue existiendo para compatibilidad)
 # ==========================================================
 def calcular_delta_h_fcc(lat0, lon0, ang):
-    # 81 puntos de 10 a 50 km, cada 0.5 km
-    distancias = np.arange(10, 50.1, 0.5)
 
-    # ===============================
-    # 1. Construir la lista de puntos
-    # ===============================
+    distancias = np.arange(10, 50.1, 0.5)
     puntos = []
+
     for d in distancias:
         lat, lon = geographic_offset(lat0, lon0, d, ang)
         puntos.append(f"{lat},{lon}")
 
-    # ===============================
-    # 2. Llamar la API EN UN SOLO REQUEST
-    # ===============================
     locations_param = "|".join(puntos)
     url = f"https://api.opentopodata.org/v1/srtm30m?locations={locations_param}"
 
@@ -74,21 +87,6 @@ def calcular_delta_h_fcc(lat0, lon0, ang):
         elevaciones = [item["elevation"] for item in data["results"] if item["elevation"] is not None]
     except:
         return None, None, None, None
-
-    if len(elevaciones) < 10:
-        return None, None, None, None
-
-    elevaciones = np.array(elevaciones)
-
-    # ===============================
-    # 3. Calcular percentiles FCC
-    # ===============================
-    h10 = np.percentile(elevaciones, 10)
-    h90 = np.percentile(elevaciones, 90)
-    delta_h = h90 - h10
-
-    return h10, h90, delta_h, elevaciones
-
 
     if len(elevaciones) < 10:
         return None, None, None, None
@@ -106,6 +104,7 @@ def calcular_delta_h_fcc(lat0, lon0, ang):
 # LAYOUT PRINCIPAL
 # =======================
 left, right = st.columns([1, 2])
+
 
 # =======================
 # PANEL IZQUIERDO
@@ -129,13 +128,14 @@ with left:
     curve_options = {"F(50,50)": 0, "F(50,10)": 1, "F(50,90)": 2}
     curve = curve_options[st.selectbox("Curva", list(curve_options.keys()))]
 
+
 # =======================
 # PANEL DERECHO
 # =======================
 with right:
 
     # =====================================================
-    #             MODO 1: CALCULAR DELTA-H FCC
+    # MODO 1: CALCULAR DELTA-H
     # =====================================================
     if mode.startswith("1"):
 
@@ -146,7 +146,7 @@ with right:
 
         if st.button("Calcular Delta-H"):
 
-            st.info("Consultando elevaciones SRTM y aplicando metodología FCC...")
+            st.info("Consultando elevaciones (SRTM) y aplicando metodología FCC…")
             progress = st.progress(0)
 
             angulos = list(range(0, 360, 5))
@@ -158,7 +158,6 @@ with right:
                 h10, h90, dh, perfil = calcular_delta_h_fcc(lat, lon, ang)
                 resultados.append((ang, h10, h90, dh))
 
-                # Guardar puntos del perfil para mapa
                 if perfil is not None:
                     distancias = np.arange(10, 50.1, 0.5)
                     for d, h in zip(distancias, perfil):
@@ -169,27 +168,22 @@ with right:
 
             st.success("✔ Delta-H calculados correctamente")
 
-            # Mostrar en 3 columnas, 24 valores cada una
             colA, colB, colC = st.columns(3)
             columnas = [colA, colB, colC]
 
             for idx, col in enumerate(columnas):
-            with col:
-            for ang, h10, h90, dh in resultados[idx*24:(idx+1)*24]:
+                with col:
+                    for ang, h10, h90, dh in resultados[idx*24:(idx+1)*24]:
 
-            # REEMPLAZO SEGURO DE VALORES NULOS ANTES DEL F-STRING
-            h10 = 0 if h10 is None else h10
-            h90 = 0 if h90 is None else h90
-            dh  = 0 if dh  is None else dh
+                        # reemplazo seguro de NULLs
+                        h10 = 0 if h10 is None else h10
+                        h90 = 0 if h90 is None else h90
+                        dh  = 0 if dh  is None else dh
 
-            col.write(
-                f"**{ang}°** → H10={h10:.1f}m | H90={h90:.1f}m | **ΔH={dh:.1f}m**"
-            )
+                        col.write(
+                            f"**{ang}°** → H10={h10:.1f}m | H90={h90:.1f}m | **ΔH={dh:.1f}m**"
+                        )
 
-
-            # =======================
-            # MAPA LEAFLET
-            # =======================
             coords_js = json.dumps(leaf_points)
 
             leaflet_html = f"""
@@ -199,7 +193,6 @@ with right:
                 <meta charset="utf-8"/>
                 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
                 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
                 <style>
                     html, body, #map {{
                         height: 100%;
@@ -211,11 +204,7 @@ with right:
                 <div id="map"></div>
                 <script>
                     var map = L.map('map').setView([{lat}, {lon}], 9);
-
-                    L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
-                        maxZoom: 18,
-                        attribution: '&copy; OpenStreetMap'
-                    }}).addTo(map);
+                    L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png').addTo(map);
 
                     var puntos = {coords_js};
 
@@ -239,7 +228,7 @@ with right:
 
 
     # =====================================================
-    #      MODO 2 (Tu original): CÁLCULO DE RADIALES FCC
+    # MODO 2: RADIALES FCC
     # =====================================================
     elif mode.startswith("2"):
 
@@ -325,7 +314,6 @@ with right:
                 <div id="map"></div>
                 <script>
                     var map = L.map('map').setView([{lat0}, {lon0}], 9);
-
                     L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png').addTo(map);
 
                     var geojsonData = {geojson_str};
@@ -345,4 +333,5 @@ with right:
             </body>
             </html>
             """
+
             html(leaflet_map, height=700)

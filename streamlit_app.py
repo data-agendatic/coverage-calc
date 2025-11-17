@@ -18,12 +18,18 @@ FCC_BASE = "https://geo.fcc.gov/api/contours/distance.json"
 # ==========================================================
 # FUNCIÓN: ELEVACIONES SRTM (OPENTOPO)
 # ==========================================================
-def obtener_elevacion(lat, lon):
+def obtener_elevacion_nasadem(lat, lon):
+    """
+    Consulta NASADEM a través de opentopodata.
+    Mucho más limpio que SRTM.
+    """
     try:
-        url = f"https://api.opentopodata.org/v1/srtm30m?locations={lat},{lon}"
-        r = requests.get(url, timeout=4)
-        d = r.json()
-        return d["results"][0]["elevation"]
+        url = f"https://api.opentopodata.org/v1/nasadem?locations={lat},{lon}"
+        r = requests.get(url, timeout=5)
+        data = r.json()
+
+        elev = data["results"][0]["elevation"]
+        return elev  # normalmente no devuelve None
     except:
         return None
 

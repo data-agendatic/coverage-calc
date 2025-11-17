@@ -174,11 +174,18 @@ with right:
             columnas = [colA, colB, colC]
 
             for idx, col in enumerate(columnas):
-                with col:
-                    for ang, h10, h90, dh in resultados[idx*24:(idx+1)*24]:
-                        col.write(
-                            f"**{ang}°** → H10={h10:.1f}m | H90={h90:.1f}m | **ΔH={dh:.1f}m**"
-                        )
+            with col:
+            for ang, h10, h90, dh in resultados[idx*24:(idx+1)*24]:
+
+            # REEMPLAZO SEGURO DE VALORES NULOS ANTES DEL F-STRING
+            h10 = 0 if h10 is None else h10
+            h90 = 0 if h90 is None else h90
+            dh  = 0 if dh  is None else dh
+
+            col.write(
+                f"**{ang}°** → H10={h10:.1f}m | H90={h90:.1f}m | **ΔH={dh:.1f}m**"
+            )
+
 
             # =======================
             # MAPA LEAFLET

@@ -16,22 +16,26 @@ st.markdown("Herramientas para cálculos FCC, Delta-H y coberturas con radiales.
 FCC_BASE = "https://geo.fcc.gov/api/contours/distance.json"
 
 # ==========================================================
-# FUNCIÓN: ELEVACIONES SRTM (OPENTOPO)
+# FUNCIÓN: ELEVACIONES (NASADEM)
 # ==========================================================
-def obtener_elevacion_nasadem(lat, lon):
-    """
-    Consulta NASADEM a través de opentopodata.
-    Mucho más limpio que SRTM.
-    """
-    try:
-        url = f"https://api.opentopodata.org/v1/nasadem?locations={lat},{lon}"
-        r = requests.get(url, timeout=5)
-        data = r.json()
+def calcular_delta_h_nasadem(lat0, lon0, ang):
+    perfil = obtener_perfil_nasadem(lat0, lon0, ang)
 
-        elev = data["results"][0]["elevation"]
-        return elev  # normalmente no devuelve None
-    except:
-        return None
+    if perfil is None:
+        return 0, 0, 0, None
+
+    elev = np.array([0 if v is None else v for v in perfil])
+
+    # suavizado opcional
+    # from scipy.ndimage import median_filter
+    # elev = median_filter(elev, size=5)
+
+    h10 = np.percentile(elev, 10)
+    h90 = np.percentile(elev, 90)
+    delta_h = h90 - h10
+
+    return h10, h90, delta_h, elev
+
 
 
 # ==========================================================
